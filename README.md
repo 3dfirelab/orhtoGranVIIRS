@@ -11,4 +11,6 @@ see
 `dirin02` groups the L1B-02 product
 while `L1B-03` geolocation product should be in a side directoru `L1B-03` at the same level as `L1B-02`.
 
+The code still requires many devlopements, in particular the way it deals with thermal band in the bow tie region of the granule. 
+
 
