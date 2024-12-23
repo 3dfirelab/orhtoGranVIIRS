@@ -13,6 +13,8 @@ from shapely.geometry import Point
 import rasterio
 from rasterio.features import geometry_mask
 import pdb 
+from satpy import Scene
+import warnings
 
 # Function to recursively convert HDF5 groups and datasets to a dictionary
 def h5_to_dict(h5group):
@@ -39,7 +41,8 @@ def h5_to_dict(h5group):
             else:
                 radiance_add_offset = 0
 
-            result[key] = ( ( (item[()] * scale_factor) + add_offset ) * radiance_scale_factor + radiance_add_offset)
+            result[key] =  ( (item[()] * scale_factor) + add_offset ) #* radiance_scale_factor + radiance_add_offset)
+            #result[key] = ( item[()] * radiance_scale_factor + radiance_add_offset)
             #result[key] = item[()] 
             
             variable = key
@@ -56,7 +59,7 @@ if __name__ == '__main__':
     for viirs02 in viirs02s:
         foutname = dirout + '.'.join(os.path.basename(viirs02).split('.')[:3])+'.nc'
 
-        if not(os.path.isfile(foutname)):
+        if True: #not(os.path.isfile(foutname)):
             print('---------------------')
             print(os.path.basename(viirs02))
                 
@@ -107,7 +110,8 @@ if __name__ == '__main__':
                 method_interpolation = 'linear'
                 resolution = 0.01
             elif 'IMG' in os.path.basename(viirs02):
-                ibands = [1,2,3,4,5]
+                #ibands = [1,2,3,4,5]
+                ibands = [4,5]
                 bandletter = 'I'
                 method_interpolation = 'nearest'
                 resolution = 0.005
@@ -115,17 +119,33 @@ if __name__ == '__main__':
             bands = []; bands_flag = []
             for  iband in ibands: 
                 bands.append('{:s}{:02d}'.format(bandletter,iband))
+                bands.append('{:s}{:02d}_rad'.format(bandletter,iband))
+                bands_flag.append('{:s}{:02d}_quality_flags'.format(bandletter,iband))
                 bands_flag.append('{:s}{:02d}_quality_flags'.format(bandletter,iband))
 
             with h5py.File(hdf5_file, 'r') as h5file:
                 # Convert HDF5 file content to a dictionary
                 data_dict, variables = h5_to_dict(h5file)
-
+            
             nc_dict = {}
+            
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore')
+                
+                for band_ in (bands): 
+                    if '_rad' in band_:
+                        scn = Scene(reader="viirs_l1b", filenames=[viirs02] )
+                        scn.load([band_.split('_')[0]],calibration='radiance')
+                        nc_dict[band_] = (['y', 'x'], np.array(scn[band_.split('_')[0]].data))
+                    else:
+                        scn = Scene(reader="viirs_l1b", filenames=[viirs02] )
+                        scn.load([band_])
+                        nc_dict[band_] = (['y', 'x'], np.array(scn[band_].data))
+            
             for key in data_dict.keys():
                 if key == 'observation_data':
                     for key2 in data_dict[key]:
-                        if key2 in bands+bands_flag:
+                        if key2 in bands_flag:
                             print(key2)
                             nc_dict[key2] = (['y', 'x'], data_dict[key][key2])
             
@@ -136,7 +156,7 @@ if __name__ == '__main__':
                     })
 
             ds.rio.write_crs('EPSG:4326', inplace=True)
-         
+            
             idx = np.where(ds[bands_flag[3]].data != 256)
             # Sample points (you can replace this with your actual points)
             points = [Point(x, y) for x, y in zip(dsgeo['longitude'].data[idx][::100], dsgeo['latitude'].data[idx][::100]) ]

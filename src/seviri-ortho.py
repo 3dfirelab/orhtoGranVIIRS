@@ -10,26 +10,9 @@ import datetime
 import pdb 
 import pickle
 import shutil
+import rioxarray
 
 ##########################
-def define_bbox_from_center(lat, lon, width_m):
-    # Conversion constants
-    meters_per_deg_lat = 111320  # Approximate for latitude globally
-    meters_per_deg_lon = lambda lat: 111320 * math.cos(math.radians(lat))  # Depends on latitude
-
-    # Calculate half-width in degrees
-    half_width_deg_lat = width_m / (2 * meters_per_deg_lat)
-    half_width_deg_lon = width_m / (2 * meters_per_deg_lon(lat))
-
-    # Define bounding box
-    bbox = {
-        "minx": lon - half_width_deg_lon,
-        "miny": lat - half_width_deg_lat,
-        "maxx": lon + half_width_deg_lon,
-        "maxy": lat + half_width_deg_lat
-    }
-    return bbox
-
 def adjust_da_attr(da):
     #expand dict attr 
     # Expand the 'metadata' dictionary into multiple attributes
@@ -62,17 +45,19 @@ def adjust_da_attr(da):
 #############################
 if __name__ == '__main__':
 #############################
-    
-    firename = 'pdV'
-    latf, lonf = 41.694, 1.894
-    width = 75.e3 #m
+   
+    '''
+    the final nc file is not ortho because I keep the acquisition time variable.
+    see seviri-plotFire.py to do the final orthorectification step.
+    '''
 
-    dirin = '/data/paugam/Data/ElPontDeVilamora/Severi/NAT/'
-    dirout = '/data/paugam/Data/ElPontDeVilamora/Severi/nc-ortho/'
+    firename = 'pdV'
+
+    dirin = '/data/paugam/Data/ElPontDeVilamora/Seviri/NAT/'
+    dirout = '/data/paugam/Data/ElPontDeVilamora/Seviri/nc-ortho/'
     extraction_path = "/tmp/paugam/SEVIRI/extracted_data/"
-    if os.path.isdir: shutil.rmtree(extraction_path)
+    if os.path.isdir(extraction_path): shutil.rmtree(extraction_path)
     zipfiles =sorted( glob.glob(dirin+'*.zip') )
-    bbox = define_bbox_from_center(latf, lonf, width) 
 
     for zipfile_ in zipfiles:
         os.makedirs(extraction_path, exist_ok=True)
@@ -91,6 +76,15 @@ if __name__ == '__main__':
             #load RGB
             composite_id = ['natural_color']
             scn.load(composite_id, upper_right_corner="NE")
+
+            #check if file was already processed
+            time_img_ = scn['natural_color'].attrs['start_time'].strftime("%Y%j.%H%M") 
+            print(time_img_, end=' ')
+            if os.path.isfile(dirout+'/seviri-S-EU-{:s}.nc'.format(time_img_)): 
+                print (' already done')
+                continue
+            else:
+                print(' ')
 
             #load IR
             scn.load(['IR_039','IR_108'], upper_right_corner="NE")
@@ -115,7 +109,7 @@ if __name__ == '__main__':
                           compat='override'
                           )
             time_img = datetime.datetime.strptime(ds.attrs['time_parameters_nominal_start_time'], "%Y-%m-%d %H:%M:%S.%f").strftime("%Y%j.%H%M") 
-            print(time_img)
+            
             crs = ds.attrs["area"].to_cartopy_crs()
             ds = ds.rio.write_crs(crs,inplace=True)
             ds=ds.drop_vars('crs')

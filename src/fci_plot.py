@@ -22,7 +22,7 @@ import pdb
 import argparse
 
 ##########################
-def seviritime2datetime(yearjd,time):
+def fcitime2datetime(yearjd,time):
     tmp_ = yearjd[:4]+'-'+yearjd[4:]+'_'+time[:2]+':'+time[2:]
     return datetime.datetime.strptime(tmp_, '%Y-%j_%H:%M')
 
@@ -60,11 +60,11 @@ def get_utm_epsg(lat, lon):
     return epsg_code
 
 ##########################
-def get_UTMsubset_fire(seviriInfo,epsgCode):
+def get_UTMsubset_fire(seviriInfo,bbox,epsgCode):
 
     ds = xr.open_dataset(seviriInfo.filename)
     ds = ds.rio.write_crs(ds.rio.crs, inplace=True)
-    ds = ds.drop_vars('acq_time')
+    #ds = ds.drop_vars('acq_time')
     ds = ds.rio.reproject('epsg:4326')
 
     ds_subset = ds.rio.clip_box(
@@ -73,6 +73,7 @@ def get_UTMsubset_fire(seviriInfo,epsgCode):
         maxx=bbox["maxx"],
         maxy=bbox["maxy"]
     )
+    
     boundslatlon = {
             'lat_min' : ds_subset.y.min().values,
             'lat_max' : ds_subset.y.max().values,
@@ -87,67 +88,61 @@ def get_UTMsubset_fire(seviriInfo,epsgCode):
 if __name__ == '__main__':
 ##########################
     
-    parser = argparse.ArgumentParser(description="to plot seviri data of fire location")
+    parser = argparse.ArgumentParser(description="to plot fci data at fire location")
     parser.add_argument('firename', type=str, help="fire name defined in the code")
     args = parser.parse_args()
 
-    if args.firename == 'landes':
+    if args.firename == 'aveiro':
         ### les Landes
-        latf, lonf = 44.4, -0.5
-        width = 350.e3 #m
-        firename = 'Les Landes'
-        firename_short = 'landes'
+        latf, lonf = 40.689, -8.629
+        width = 200.e3 #m
+        firename = 'aveiro'
+        firename_short = 'averio'
 
-    if args.firename == 'pdV':
-        ### pdV
-        latf, lonf = 41.694, 1.894
-        width = 250.e3 #m
-        firename = 'El Pont de Vilomara'
-        firename_short = 'pdV'
     
-    dirin  = '/data/paugam/Data/ElPontDeVilamora/Seviri/nc-ortho/'
+    dirin  = '/data/paugam/Data/2024_aveiro/FCI-nc-ortho/'
     
     #define bbox
     bbox = define_bbox_from_center(latf, lonf, width)
     epsgCode = get_utm_epsg(latf, lonf)
     
-    dirout  = '/data/paugam/Data/ElPontDeVilamora/Seviri/png-{:s}/'.format(firename_short)
+    dirout  = '/data/paugam/Data/2024_aveiro/FCI-{:s}-png/'.format(firename_short)
     os.makedirs(dirout, exist_ok=True)
     
     #select times
     times = []
     bands = []
     sats = []
-    seviriNCs = glob.glob(dirin+'*.nc')
-    for sevirinc in seviriNCs:
-        times.append( seviritime2datetime(*(os.path.basename(sevirinc).split('-')[-1].split('.')[:2])) )
-        sats.append('MSG')
-        bands.append('RGBIR39108')
+    fciNCs = glob.glob(dirin+'*.nc')
+    for fcinc in fciNCs:
+        times.append( fcitime2datetime(*(os.path.basename(fcinc).split('-')[-1].split('.')[:2])) )
+        sats.append('MTG')
+        bands.append('RGBIR38105')
    
-    seviridf = pd.DataFrame({
+    fcidf = pd.DataFrame({
         'time': times, 
         'band': bands,
         'sat': sats,
-        'filename': seviriNCs
+        'filename': fciNCs
         })
-    seviridf_s = seviridf.sort_values(by=['time', 'band'], ascending=[True, True])
+    fcidf_s = fcidf.sort_values(by=['time', 'band'], ascending=[True, True])
 
     #loop through times and plot fire img
-    for idx, seviriInfo  in seviridf_s.iterrows(): 
+    for idx, fciInfo  in fcidf_s.iterrows(): 
        
         fig, axs = plt.subplots(1, 3, figsize=(16,6), subplot_kw={'projection':  ccrs.epsg(epsgCode)})
-        fig.suptitle('{:s}: {:s} | {:s}'.format(firename, seviriInfo['sat'], seviriInfo['time'].strftime("%Y-%m-%d %H:%M") ) )
+        fig.suptitle('{:s}: {:s} | {:s}'.format(firename, fciInfo['sat'], fciInfo['time'].strftime("%Y-%m-%d %H:%M") ) )
         flag_plot = False
        
-        ds_subset_utm, boundslatlon = get_UTMsubset_fire(seviriInfo,epsgCode) 
+        ds_subset_utm, boundslatlon = get_UTMsubset_fire(fciInfo,bbox,epsgCode) 
         in_bounds = (boundslatlon['lat_min'] <= latf <= boundslatlon['lat_max']) and \
                     (boundslatlon['lon_min'] <= lonf <= boundslatlon['lon_max'])
         if not(in_bounds): continue
       
-        print(firename_short, seviriInfo['sat'], seviriInfo['time'])
+        print(firename_short, fciInfo['sat'], fciInfo['time'])
         
         ax = axs[0]
-        pco=ax.pcolormesh(ds_subset_utm.x, ds_subset_utm.y, ds_subset_utm.IR_039.data, cmap='inferno')
+        pco=ax.pcolormesh(ds_subset_utm.x, ds_subset_utm.y, ds_subset_utm.ir_38.isel(time=0).data, cmap='inferno')
         gridlines = ax.gridlines(draw_labels=True)
         gridlines.top_labels = True
         gridlines.right_labels = False
@@ -159,7 +154,7 @@ if __name__ == '__main__':
         cbar.set_label('MWIR BT (K)')
             
         ax = axs[1]
-        pco=ax.pcolormesh(ds_subset_utm.x, ds_subset_utm.y, ds_subset_utm.IR_108.data, cmap='jet')
+        pco=ax.pcolormesh(ds_subset_utm.x, ds_subset_utm.y, ds_subset_utm.ir_105.isel(time=0).data, cmap='jet')
         gridlines = ax.gridlines(draw_labels=True)
         gridlines.top_labels = True
         gridlines.right_labels = False
@@ -180,9 +175,9 @@ if __name__ == '__main__':
 
 
         # Stack the bands together
-        rgb = xr.concat([(ds_subset_utm['R']-Rmin)/Rmax,
-                         (ds_subset_utm['G']-Gmin)/Gmax,
-                         (ds_subset_utm['B']-Bmin)/Bmax],
+        rgb = xr.concat([(ds_subset_utm['R'].isel(time=0)-Rmin)/Rmax,
+                         (ds_subset_utm['G'].isel(time=0)-Gmin)/Gmax,
+                         (ds_subset_utm['B'].isel(time=0)-Bmin)/Bmax],
                          dim='bands')
 
         # Ensure bands are in correct order (Red, Green, Blue)
@@ -201,7 +196,7 @@ if __name__ == '__main__':
     
         plt.subplots_adjust(bottom=0.2)
 
-        fig.savefig('{:s}/{:s}-{:s}-{:s}.png'.format(dirout,firename_short,'MSG-Seviri',seviriInfo['time'].strftime("%Y-%m-%d-%H%M")))
+        fig.savefig('{:s}/{:s}-{:s}-{:s}.png'.format(dirout,firename_short,'MTG-fci',fciInfo['time'].strftime("%Y-%m-%d-%H%M")))
         
         plt.close(fig)
     
