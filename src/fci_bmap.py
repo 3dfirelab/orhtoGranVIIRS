@@ -50,18 +50,17 @@ if __name__ == '__main__':
         latf, lonf = 40.689, -8.629
         width = 200.e3 #m
         firename = 'aveiro'
-        firename_short = 'averio'
+        firename_short = 'aveiro'
     
-    dirin  = '/data/paugam/Data/2024_aveiro/FCI-{:s}-nc/'.format(firename_short)
+    dirin  = '/home/paugam/Data/2024_aveiro/FCI-{:s}-nc/'.format(firename_short)
 
     ds = xr.open_dataset(dirin+'MTG-'+firename_short+'.nc')
     crs = load_crs_from_prj(dirin+'MTG-'+firename_short+'.prj')
     threshold = 320
-  
-    
+ 
     ir_38_max = ds.ir_38.max(dim='time')
     bmap = np.zeros_like(ir_38_max)
-    reference_time = pd.Timestamp("2024-09-15 00:00:00")  
+    reference_time = pd.Timestamp("2024-09-15T00:00:00")  
 
     for j,i in zip(*np.where(ir_38_max > threshold)):
 
